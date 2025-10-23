@@ -9,7 +9,6 @@ local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
-local HttpService = game:GetService("HttpService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -573,7 +572,9 @@ function SpeedHub:MakeWindow(config)
                 value = math.clamp(value, slider.Min, slider.Max)
                 
                 slider:SetValue(value)
-                slider.Callback(value)
+                if slider.Callback then
+                    slider.Callback(value)
+                end
             end
             
             SliderButton.MouseButton1Down:Connect(function()
@@ -592,8 +593,10 @@ function SpeedHub:MakeWindow(config)
                 end
             end)
             
-            SliderTrack.MouseButton1Down:Connect(function(x, y)
-                updateSlider({Position = Vector2.new(x, y)})
+            -- แก้ไข: ใช้ MouseButton1Click แทน MouseButton1Down
+            SliderTrack.MouseButton1Click:Connect(function()
+                local mouse = UserInputService:GetMouseLocation()
+                updateSlider({Position = mouse})
             end)
             
             SliderFrame.Parent = Tab.Content
@@ -906,11 +909,11 @@ function SpeedHub:MakeWindow(config)
         Window.Gui:Destroy()
     end)
     
-    -- Keybind เพื่อเปิด/ปิด UI (F5)
+    -- Keybind เพื่อเปิด/ปิด UI (Right Control)
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if gameProcessed then return end
         
-        if input.KeyCode == Enum.KeyCode.F5 then
+        if input.KeyCode == Enum.KeyCode.RightControl then
             Window.Gui.Enabled = not Window.Gui.Enabled
             ToggleButton.Text = Window.Gui.Enabled and "HIDE GUI" or "SHOW GUI"
         end
@@ -922,10 +925,38 @@ function SpeedHub:MakeWindow(config)
     Window.Gui.Parent = playerGui
     
     warn("🎮 Speed Hub Library Loaded Successfully!")
-    warn("📱 Press F5 to show/hide the menu")
+    warn("📱 Press Right Control to show/hide the menu")
     warn("📍 Drag the title bar to move the window")
     
     return Window
+end
+
+-- สร้างปุ่มเปิดปิด GUI แยก
+function SpeedHub:CreateToggleButton()
+    local ToggleGUI = Instance.new("ScreenGui")
+    ToggleGUI.Name = "ToggleGUI"
+    ToggleGUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    ToggleGUI.ResetOnSpawn = false
+    
+    local ToggleButton = Instance.new("TextButton")
+    ToggleButton.Name = "ToggleButton"
+    ToggleButton.Size = UDim2.new(0, 100, 0, 40)
+    ToggleButton.Position = UDim2.new(0, 10, 0, 10)
+    ToggleButton.BackgroundColor3 = SpeedHub.Colors.Primary
+    ToggleButton.BorderSizePixel = 0
+    ToggleButton.Text = "OPEN GUI"
+    ToggleButton.TextColor3 = SpeedHub.Colors.Text
+    ToggleButton.TextSize = 14
+    ToggleButton.Font = Enum.Font.GothamBold
+    
+    local ToggleCorner = Instance.new("UICorner")
+    ToggleCorner.CornerRadius = UDim.new(0, 8)
+    ToggleCorner.Parent = ToggleButton
+    
+    ToggleButton.Parent = ToggleGUI
+    ToggleGUI.Parent = playerGui
+    
+    return ToggleButton
 end
 
 return SpeedHub
