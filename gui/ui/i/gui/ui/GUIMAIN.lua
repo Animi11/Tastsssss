@@ -33,14 +33,14 @@ function SpeedHub:MakeWindow(config)
     config = config or {}
     
     -- ตรวจสอบว่ามี UI อยู่แล้วหรือไม่
-    if playerGui:FindFirstChild("SpeedHub") then
-        playerGui.SpeedHub:Destroy()
+    if playerGui:FindFirstChild("AmaHub_ScreenGui") then
+        playerGui.AmaHub_ScreenGui:Destroy()
     end
 
     -- สร้าง ScreenGui หลัก
     local Window = {}
     Window.Gui = Instance.new("ScreenGui")
-    Window.Gui.Name = "SpeedHub"
+    Window.Gui.Name = "AmaHub_ScreenGui" -- เปลี่ยนชื่อ Gui หลัก
     Window.Gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     Window.Gui.ResetOnSpawn = false
 
@@ -48,12 +48,13 @@ function SpeedHub:MakeWindow(config)
     Window.MainFrame = Instance.new("Frame")
     Window.MainFrame.Name = "MainFrame"
     Window.MainFrame.Size = UDim2.new(0, 500, 0, 450)
-    Window.MainFrame.Position = UDim2.new(0.5, -250, 0.5, -225)
-    Window.MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+    Window.MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0) -- แก้ไข: ตั้งตำแหน่งกลางจอ 100%
+    Window.MainFrame.AnchorPoint = Vector2.new(0.5, 0.5) -- แก้ไข: ตั้ง AnchorPoint กลางจอ
     Window.MainFrame.BackgroundColor3 = SpeedHub.Colors.Background
     Window.MainFrame.BorderSizePixel = 0
     Window.MainFrame.ClipsDescendants = true
-
+    Window.MainFrame.Visible = false -- เริ่มต้นด้วยการซ่อน GUI หลัก
+    
     -- Corner radius
     local UICorner = Instance.new("UICorner")
     UICorner.CornerRadius = UDim.new(0, 12)
@@ -77,15 +78,15 @@ function SpeedHub:MakeWindow(config)
     TitleBarCorner.CornerRadius = UDim.new(0, 12)
     TitleBarCorner.Parent = TitleBar
 
-    -- Logo
+    -- Logo (Ama Hub Icon)
     local Logo = Instance.new("TextLabel")
     Logo.Name = "Logo"
     Logo.Size = UDim2.new(0, 30, 0, 30)
     Logo.Position = UDim2.new(0, 10, 0, 10)
     Logo.BackgroundTransparency = 1
-    Logo.Text = "⚡"
+    Logo.Text = config.Icon or "A" -- ตั้งค่า Icon
     Logo.TextColor3 = SpeedHub.Colors.Primary
-    Logo.TextSize = 20
+    Logo.TextSize = 25
     Logo.Font = Enum.Font.GothamBold
     Logo.Parent = TitleBar
 
@@ -94,7 +95,7 @@ function SpeedHub:MakeWindow(config)
     Title.Size = UDim2.new(0.7, 0, 0, 25)
     Title.Position = UDim2.new(0, 45, 0, 8)
     Title.BackgroundTransparency = 1
-    Title.Text = config.Title or "SPEED HUB"
+    Title.Text = config.Title or "AMA HUB" -- แก้ไขชื่อ UI
     Title.TextColor3 = SpeedHub.Colors.Text
     Title.TextSize = 18
     Title.Font = Enum.Font.GothamBold
@@ -113,7 +114,7 @@ function SpeedHub:MakeWindow(config)
     SubTitle.TextXAlignment = Enum.TextXAlignment.Left
     SubTitle.Parent = TitleBar
 
-    -- Toggle GUI Button
+    -- Toggle GUI Button (ใน TitleBar - สำหรับซ่อน/แสดง MainFrame)
     local ToggleButton = Instance.new("TextButton")
     ToggleButton.Name = "ToggleButton"
     ToggleButton.Size = UDim2.new(0, 80, 0, 25)
@@ -129,7 +130,7 @@ function SpeedHub:MakeWindow(config)
     ToggleButtonCorner.CornerRadius = UDim.new(0, 6)
     ToggleButtonCorner.Parent = ToggleButton
 
-    -- Close Button
+    -- Close Button (สำหรับทำลาย GUI)
     local CloseButton = Instance.new("TextButton")
     CloseButton.Name = "CloseButton"
     CloseButton.Size = UDim2.new(0, 30, 0, 30)
@@ -296,7 +297,8 @@ function SpeedHub:MakeWindow(config)
             
             return {
                 Name = sectionName,
-                Frame = SectionFrame
+                Frame = SectionFrame,
+                Content = SectionContent -- เพิ่ม Content Frame สำหรับการควบคุมภายใน
             }
         end
         
@@ -454,13 +456,7 @@ function SpeedHub:MakeWindow(config)
                 end
             end
             
-            toggle.Callback = function(value) end
-            
-            function toggle:Callback(func)
-                if type(func) == "function" then
-                    self.Callback = func
-                end
-            end
+            toggle.Callback = toggleConfig.Callback or function(value) end
             
             -- Toggle click event
             ToggleButton.MouseButton1Click:Connect(function()
@@ -553,8 +549,11 @@ function SpeedHub:MakeWindow(config)
             SliderTrack.Parent = SliderFrame
             
             function slider:SetValue(value)
+                -- ปรับค่าให้เป็นไปตาม Increase และ Min/Max
+                value = math.floor(value / self.Increase) * self.Increase
                 value = math.clamp(value, self.Min, self.Max)
                 self.Value = value
+                
                 SliderLabel.Text = self.Name .. ": " .. value
                 
                 local fillSize = (value - self.Min) / (self.Max - self.Min)
@@ -562,29 +561,37 @@ function SpeedHub:MakeWindow(config)
                 SliderButton.Position = UDim2.new(fillSize, -8, 0.5, -8)
             end
             
-            slider.Callback = function(value) end
+            slider.Callback = sliderConfig.Callback or function(value) end
             
             -- Slider dragging
             local dragging = false
             
             local function updateSlider(input)
                 local relativeX = (input.Position.X - SliderTrack.AbsolutePosition.X) / SliderTrack.AbsoluteSize.X
-                local value = math.floor(slider.Min + relativeX * (slider.Max - slider.Min))
-                value = math.clamp(value, slider.Min, slider.Max)
                 
-                slider:SetValue(value)
+                -- คำนวณค่าและปรับให้เป็นไปตาม Increase
+                local rawValue = slider.Min + relativeX * (slider.Max - slider.Min)
+                local adjustedValue = math.floor(rawValue / slider.Increase) * slider.Increase
+                
+                adjustedValue = math.clamp(adjustedValue, slider.Min, slider.Max)
+                
+                slider:SetValue(adjustedValue)
                 if slider.Callback then
-                    slider.Callback(value)
+                    slider.Callback(adjustedValue)
                 end
             end
             
             SliderButton.MouseButton1Down:Connect(function()
                 dragging = true
+                UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter -- ล็อคเม้าส์ระหว่างลาก
             end)
             
             UserInputService.InputEnded:Connect(function(input)
                 if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                    dragging = false
+                    if dragging then
+                        dragging = false
+                        UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+                    end
                 end
             end)
             
@@ -594,10 +601,12 @@ function SpeedHub:MakeWindow(config)
                 end
             end)
             
-            -- แก้ไข: ใช้ MouseButton1Click แทน MouseButton1Down
-            SliderTrack.MouseButton1Click:Connect(function()
-                local mouse = UserInputService:GetMouseLocation()
-                updateSlider({Position = mouse})
+            -- แก้ไข: ใช้ MouseButton1Down กับ SliderTrack แทน MouseButton1Click
+            -- เพื่อให้สามารถคลิกที่ Track เพื่อกำหนดค่าได้ทันที
+            SliderTrack.MouseButton1Down:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    updateSlider(input)
+                end
             end)
             
             SliderFrame.Parent = Tab.Content
@@ -619,10 +628,11 @@ function SpeedHub:MakeWindow(config)
             
             local DropdownFrame = Instance.new("Frame")
             DropdownFrame.Name = dropdown.Name .. "Dropdown"
-            DropdownFrame.Size = UDim2.new(1, 0, 0, 40)
+            DropdownFrame.Size = UDim2.new(1, 0, 0, 60) -- เพิ่มขนาดเฟรมหลักรองรับ Description
             DropdownFrame.BackgroundColor3 = SpeedHub.Colors.Card
             DropdownFrame.BorderSizePixel = 0
             DropdownFrame.AutomaticSize = Enum.AutomaticSize.Y
+            DropdownFrame.ClipsDescendants = true -- คลิปส่วนที่เกิน
             
             local DropdownCorner = Instance.new("UICorner")
             DropdownCorner.CornerRadius = UDim.new(0, 8)
@@ -633,13 +643,19 @@ function SpeedHub:MakeWindow(config)
             DropdownStroke.Thickness = 1
             DropdownStroke.Parent = DropdownFrame
             
-            local DropdownButton = Instance.new("TextButton")
+            local HeaderFrame = Instance.new("Frame") -- เฟรมส่วนหัวสำหรับคลิก
+            HeaderFrame.Name = "HeaderFrame"
+            HeaderFrame.Size = UDim2.new(1, 0, 0, 60)
+            HeaderFrame.BackgroundTransparency = 1
+            HeaderFrame.Parent = DropdownFrame
+            
+            local DropdownButton = Instance.new("TextButton") -- ปุ่มจริงที่ใช้คลิก
             DropdownButton.Name = "DropdownButton"
-            DropdownButton.Size = UDim2.new(1, 0, 0, 40)
+            DropdownButton.Size = UDim2.new(1, 0, 1, 0)
             DropdownButton.BackgroundTransparency = 1
             DropdownButton.Text = ""
             DropdownButton.AutoButtonColor = false
-            DropdownButton.Parent = DropdownFrame
+            DropdownButton.Parent = HeaderFrame
             
             local DropdownLabel = Instance.new("TextLabel")
             DropdownLabel.Name = "DropdownLabel"
@@ -651,19 +667,32 @@ function SpeedHub:MakeWindow(config)
             DropdownLabel.TextSize = 14
             DropdownLabel.Font = Enum.Font.GothamSemibold
             DropdownLabel.TextXAlignment = Enum.TextXAlignment.Left
-            DropdownLabel.Parent = DropdownFrame
+            DropdownLabel.Parent = HeaderFrame
             
+            local DropdownDescription = Instance.new("TextLabel")
+            DropdownDescription.Name = "DropdownDescription"
+            DropdownDescription.Size = UDim2.new(0.7, 0, 0, 15)
+            DropdownDescription.Position = UDim2.new(0, 10, 0, 22)
+            DropdownDescription.BackgroundTransparency = 1
+            DropdownDescription.Text = dropdown.Description
+            DropdownDescription.TextColor3 = SpeedHub.Colors.TextSecondary
+            DropdownDescription.TextSize = 10
+            DropdownDescription.Font = Enum.Font.Gotham
+            DropdownDescription.TextXAlignment = Enum.TextXAlignment.Left
+            DropdownDescription.RichText = true
+            DropdownDescription.Parent = HeaderFrame
+
             local DropdownValue = Instance.new("TextLabel")
             DropdownValue.Name = "DropdownValue"
             DropdownValue.Size = UDim2.new(0.7, 0, 0, 15)
-            DropdownValue.Position = UDim2.new(0, 10, 0, 22)
+            DropdownValue.Position = UDim2.new(0, 10, 0, 37)
             DropdownValue.BackgroundTransparency = 1
-            DropdownValue.Text = dropdown.Value
-            DropdownValue.TextColor3 = SpeedHub.Colors.TextSecondary
+            DropdownValue.Text = "Selected: " .. dropdown.Value
+            DropdownValue.TextColor3 = SpeedHub.Colors.Primary
             DropdownValue.TextSize = 12
-            DropdownValue.Font = Enum.Font.Gotham
+            DropdownValue.Font = Enum.Font.GothamSemibold
             DropdownValue.TextXAlignment = Enum.TextXAlignment.Left
-            DropdownValue.Parent = DropdownFrame
+            DropdownValue.Parent = HeaderFrame
             
             local DropdownArrow = Instance.new("TextLabel")
             DropdownArrow.Name = "DropdownArrow"
@@ -674,12 +703,12 @@ function SpeedHub:MakeWindow(config)
             DropdownArrow.TextColor3 = SpeedHub.Colors.TextSecondary
             DropdownArrow.TextSize = 12
             DropdownArrow.Font = Enum.Font.GothamBold
-            DropdownArrow.Parent = DropdownFrame
+            DropdownArrow.Parent = HeaderFrame
             
             local DropdownList = Instance.new("Frame")
             DropdownList.Name = "DropdownList"
             DropdownList.Size = UDim2.new(1, 0, 0, 0)
-            DropdownList.Position = UDim2.new(0, 0, 0, 40)
+            DropdownList.Position = UDim2.new(0, 0, 0, 60) -- เลื่อนลงมาใต้ HeaderFrame
             DropdownList.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
             DropdownList.BorderSizePixel = 0
             DropdownList.Visible = false
@@ -697,13 +726,40 @@ function SpeedHub:MakeWindow(config)
             
             function dropdown:SetValue(value)
                 self.Value = value
-                DropdownValue.Text = value
+                DropdownValue.Text = "Selected: " .. value
                 if self.Callback then
                     self.Callback(value)
                 end
+                -- อัพเดทสีปุ่มตัวเลือก
+                for _, child in ipairs(DropdownList:GetChildren()) do
+                    if child:IsA("TextButton") then
+                        if child.Text == value then
+                            child.BackgroundColor3 = SpeedHub.Colors.Primary
+                        else
+                            child.BackgroundColor3 = SpeedHub.Colors.Card
+                        end
+                    end
+                end
             end
             
-            dropdown.Callback = function(value) end
+            dropdown.Callback = dropdownConfig.Callback or function(value) end
+            
+            function dropdown:Toggle()
+                self.Open = not self.Open
+                DropdownList.Visible = self.Open
+                
+                if self.Open then
+                    DropdownArrow.Text = "▲"
+                    TweenService:Create(DropdownFrame, TweenInfo.new(0.2), {
+                        Size = UDim2.new(1, 0, 0, 60 + (#self.Options * 34)) -- 30 (size) + 2 (padding) + 2 (margin)
+                    }):Play()
+                else
+                    DropdownArrow.Text = "▼"
+                    TweenService:Create(DropdownFrame, TweenInfo.new(0.2), {
+                        Size = UDim2.new(1, 0, 0, 60)
+                    }):Play()
+                end
+            end
             
             -- Create option buttons
             for _, option in ipairs(dropdown.Options) do
@@ -724,15 +780,19 @@ function SpeedHub:MakeWindow(config)
                 OptionCorner.Parent = OptionButton
                 
                 OptionButton.MouseEnter:Connect(function()
-                    TweenService:Create(OptionButton, TweenInfo.new(0.2), {
-                        BackgroundColor3 = SpeedHub.Colors.Primary
-                    }):Play()
+                    if dropdown.Value ~= option then
+                        TweenService:Create(OptionButton, TweenInfo.new(0.2), {
+                            BackgroundColor3 = Color3.fromRGB(55, 55, 60)
+                        }):Play()
+                    end
                 end)
                 
                 OptionButton.MouseLeave:Connect(function()
-                    TweenService:Create(OptionButton, TweenInfo.new(0.2), {
-                        BackgroundColor3 = SpeedHub.Colors.Card
-                    }):Play()
+                    if dropdown.Value ~= option then
+                        TweenService:Create(OptionButton, TweenInfo.new(0.2), {
+                            BackgroundColor3 = SpeedHub.Colors.Card
+                        }):Play()
+                    end
                 end)
                 
                 OptionButton.MouseButton1Click:Connect(function()
@@ -743,29 +803,15 @@ function SpeedHub:MakeWindow(config)
                 OptionButton.Parent = DropdownList
             end
             
-            function dropdown:Toggle()
-                self.Open = not self.Open
-                DropdownList.Visible = self.Open
-                
-                if self.Open then
-                    DropdownArrow.Text = "▲"
-                    TweenService:Create(DropdownFrame, TweenInfo.new(0.2), {
-                        Size = UDim2.new(1, 0, 0, 40 + #self.Options * 32)
-                    }):Play()
-                else
-                    DropdownArrow.Text = "▼"
-                    TweenService:Create(DropdownFrame, TweenInfo.new(0.2), {
-                        Size = UDim2.new(1, 0, 0, 40)
-                    }):Play()
-                end
-            end
-            
             DropdownButton.MouseButton1Click:Connect(function()
                 dropdown:Toggle()
             end)
-            
+
             DropdownFrame.Parent = Tab.Content
             
+            -- Set initial value and select the default option
+            dropdown:SetValue(dropdown.Default)
+
             return dropdown
         end
         
@@ -773,11 +819,13 @@ function SpeedHub:MakeWindow(config)
             local textbox = {}
             textbox.Name = textboxConfig.Name or "TextBox"
             textbox.Description = textboxConfig.Description or ""
-            textbox.PlaceholderText = textboxConfig.PlaceholderText or "Enter text..."
+            textbox.PlaceholderText = textboxConfig.PlaceholderText or ""
+            textbox.Default = textboxConfig.Default or ""
+            textbox.Value = textbox.Default
             
             local TextBoxFrame = Instance.new("Frame")
             TextBoxFrame.Name = textbox.Name .. "TextBox"
-            TextBoxFrame.Size = UDim2.new(1, 0, 0, 60)
+            TextBoxFrame.Size = UDim2.new(1, 0, 0, 70)
             TextBoxFrame.BackgroundColor3 = SpeedHub.Colors.Card
             TextBoxFrame.BorderSizePixel = 0
             
@@ -792,7 +840,7 @@ function SpeedHub:MakeWindow(config)
             
             local TextBoxLabel = Instance.new("TextLabel")
             TextBoxLabel.Name = "TextBoxLabel"
-            TextBoxLabel.Size = UDim2.new(1, -20, 0, 20)
+            TextBoxLabel.Size = UDim2.new(0.7, 0, 0, 20)
             TextBoxLabel.Position = UDim2.new(0, 10, 0, 5)
             TextBoxLabel.BackgroundTransparency = 1
             TextBoxLabel.Text = textbox.Name
@@ -804,156 +852,172 @@ function SpeedHub:MakeWindow(config)
             
             local TextBoxDescription = Instance.new("TextLabel")
             TextBoxDescription.Name = "TextBoxDescription"
-            TextBoxDescription.Size = UDim2.new(1, -20, 0, 15)
+            TextBoxDescription.Size = UDim2.new(0.7, 0, 0, 15)
             TextBoxDescription.Position = UDim2.new(0, 10, 0, 22)
             TextBoxDescription.BackgroundTransparency = 1
             TextBoxDescription.Text = textbox.Description
             TextBoxDescription.TextColor3 = SpeedHub.Colors.TextSecondary
-            TextBoxDescription.TextSize = 11
+            TextBoxDescription.TextSize = 10
             TextBoxDescription.Font = Enum.Font.Gotham
             TextBoxDescription.TextXAlignment = Enum.TextXAlignment.Left
+            TextBoxDescription.RichText = true
             TextBoxDescription.Parent = TextBoxFrame
             
             local InputBox = Instance.new("TextBox")
             InputBox.Name = "InputBox"
             InputBox.Size = UDim2.new(1, -20, 0, 25)
             InputBox.Position = UDim2.new(0, 10, 0, 40)
-            InputBox.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+            InputBox.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
             InputBox.BorderSizePixel = 0
-            InputBox.Text = ""
+            InputBox.Text = textbox.Default
             InputBox.PlaceholderText = textbox.PlaceholderText
             InputBox.TextColor3 = SpeedHub.Colors.Text
-            InputBox.TextSize = 12
+            InputBox.TextSize = 14
             InputBox.Font = Enum.Font.Gotham
-            InputBox.ClearTextOnFocus = false
+            InputBox.TextXAlignment = Enum.TextXAlignment.Left
             
             local InputBoxCorner = Instance.new("UICorner")
             InputBoxCorner.CornerRadius = UDim.new(0, 6)
             InputBoxCorner.Parent = InputBox
             
+            InputBox.Parent = TextBoxFrame
+            
+            textbox.Callback = textboxConfig.Callback or function(value) end
+            
+            InputBox.Focused:Connect(function()
+                TweenService:Create(TextBoxFrame, TweenInfo.new(0.2), {
+                    BackgroundColor3 = Color3.fromRGB(55, 55, 60)
+                }):Play()
+            end)
+            
             InputBox.FocusLost:Connect(function(enterPressed)
+                TweenService:Create(TextBoxFrame, TweenInfo.new(0.2), {
+                    BackgroundColor3 = SpeedHub.Colors.Card
+                }):Play()
+                
                 if enterPressed then
-                    if textbox.Callback then
-                        textbox.Callback(InputBox.Text)
-                    end
+                    textbox.Value = InputBox.Text
+                    textbox.Callback(textbox.Value)
                 end
             end)
             
             InputBox.Parent = TextBoxFrame
             TextBoxFrame.Parent = Tab.Content
             
-            textbox.Callback = function(value) end
-            
             return textbox
         end
         
-        -- Add to window tabs
-        table.insert(Window.Tabs, Tab)
-        
-        -- Select first tab by default
-        if #Window.Tabs == 1 then
-            Tab:Select()
-        end
+        Window.Tabs[Tab.Name] = Tab
         
         return Tab
     end
-    
-    function Window:SelectTab(tab)
-        if tab and tab.Select then
-            tab:Select()
+
+    -- Dragging functionality for MainFrame
+    local dragging = false
+    local dragStart = Vector2.new(0, 0)
+    local frameStart = UDim2.new(0, 0, 0, 0)
+
+    local function onMouseUp()
+        if dragging then
+            dragging = false
         end
     end
-    
-    -- Dragging Functionality
-    local dragging = false
-    local dragInput, dragStart, startPos
-    
-    local function update(input)
-        local delta = input.Position - dragStart
-        Window.MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-    end
-    
-    -- แก้ไขส่วน InputBegan
-TitleBar.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = true
-        dragStart = input.Position
-        startPos = Window.MainFrame.Position
-    end
-end)
 
--- แก้ไขส่วน InputChanged
-TitleBar.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement and dragging then
-        update(input)
+    local function onMouseMoved(input)
+        if dragging then
+            local delta = input.Position - dragStart
+            local newX = frameStart.X.Offset + delta.X
+            local newY = frameStart.Y.Offset + delta.Y
+            Window.MainFrame.Position = UDim2.new(frameStart.X.Scale, newX, frameStart.Y.Scale, newY)
+        end
     end
-end)
+
+    TitleBar.MouseButton1Down:Connect(function(x, y)
+        dragging = true
+        dragStart = UserInputService:GetMouseLocation()
+        frameStart = Window.MainFrame.Position
+    end)
+    
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            onMouseUp()
+        end
+    end)
     
     UserInputService.InputChanged:Connect(function(input)
-        if input == dragInput and dragging then
-            update(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement then
+            onMouseMoved(input)
         end
     end)
-    
-    -- Toggle GUI Button Functionality
-    ToggleButton.MouseButton1Click:Connect(function()
-        Window.Gui.Enabled = not Window.Gui.Enabled
-        ToggleButton.Text = Window.Gui.Enabled and "HIDE GUI" or "SHOW GUI"
-    end)
-    
-    -- Close Button Functionality
+
+    -- Close Button logic
     CloseButton.MouseButton1Click:Connect(function()
         Window.Gui:Destroy()
     end)
     
-    -- Keybind เพื่อเปิด/ปิด UI (Right Control)
-    UserInputService.InputBegan:Connect(function(input, gameProcessed)
-        if gameProcessed then return end
-        
-        if input.KeyCode == Enum.KeyCode.RightControl then
-            Window.Gui.Enabled = not Window.Gui.Enabled
-            ToggleButton.Text = Window.Gui.Enabled and "HIDE GUI" or "SHOW GUI"
+    -- MainFrame Toggle Button logic
+    ToggleButton.MouseButton1Click:Connect(function()
+        Window.MainFrame.Visible = not Window.MainFrame.Visible
+        ToggleButton.Text = Window.MainFrame.Visible and "HIDE GUI" or "SHOW GUI"
+    end)
+    
+    -- สร้างปุ่มแยกสำหรับเปิด/ปิด GUI
+    local ToggleOutButton = Instance.new("TextButton")
+    ToggleOutButton.Name = "AmaHubToggle"
+    ToggleOutButton.Size = UDim2.new(0, 80, 0, 30)
+    ToggleOutButton.Position = UDim2.new(0, 5, 0, 5) -- ตำแหน่งมุมบนซ้าย
+    ToggleOutButton.BackgroundColor3 = SpeedHub.Colors.Card
+    ToggleOutButton.BorderSizePixel = 0
+    ToggleOutButton.Text = "A - Ama Hub"
+    ToggleOutButton.TextColor3 = SpeedHub.Colors.Text
+    ToggleOutButton.TextSize = 14
+    ToggleOutButton.Font = Enum.Font.GothamBold
+    ToggleOutButton.Parent = Window.Gui
+
+    local ToggleOutCorner = Instance.new("UICorner")
+    ToggleOutCorner.CornerRadius = UDim.new(0, 6)
+    ToggleOutCorner.Parent = ToggleOutButton
+    
+    ToggleOutButton.MouseButton1Click:Connect(function()
+        Window.MainFrame.Visible = not Window.MainFrame.Visible
+        ToggleButton.Text = Window.MainFrame.Visible and "HIDE GUI" or "SHOW GUI"
+        ToggleOutButton.Visible = not Window.MainFrame.Visible -- ซ่อนปุ่มเปิด/ปิดเมื่อ GUI เปิด
+    end)
+    
+    -- ทำให้ปุ่ม ToggleOutButton สามารถลากได้
+    local draggingOut = false
+    local dragStartOut = Vector2.new(0, 0)
+    local frameStartOut = UDim2.new(0, 0, 0, 0)
+
+    ToggleOutButton.MouseButton1Down:Connect(function(x, y)
+        draggingOut = true
+        dragStartOut = UserInputService:GetMouseLocation()
+        frameStartOut = ToggleOutButton.Position
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            if draggingOut then
+                draggingOut = false
+            end
         end
     end)
     
-    -- เพิ่ม UI ไปยัง PlayerGui
-    TitleBar.Parent = Window.MainFrame
+    UserInputService.InputChanged:Connect(function(input)
+        if draggingOut and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local delta = input.Position - dragStartOut
+            local newX = frameStartOut.X.Offset + delta.X
+            local newY = frameStartOut.Y.Offset + delta.Y
+            ToggleOutButton.Position = UDim2.new(frameStartOut.X.Scale, newX, frameStartOut.Y.Scale, newY)
+        end
+    end)
+    
     Window.MainFrame.Parent = Window.Gui
     Window.Gui.Parent = playerGui
     
-    warn("🎮 Speed Hub Library Loaded Successfully!")
-    warn("📱 Press Right Control to show/hide the menu")
-    warn("📍 Drag the title bar to move the window")
-    
+    setmetatable(Window, self)
     return Window
 end
 
--- สร้างปุ่มเปิดปิด GUI แยก
-function SpeedHub:CreateToggleButton()
-    local ToggleGUI = Instance.new("ScreenGui")
-    ToggleGUI.Name = "ToggleGUI"
-    ToggleGUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    ToggleGUI.ResetOnSpawn = false
-    
-    local ToggleButton = Instance.new("TextButton")
-    ToggleButton.Name = "ToggleButton"
-    ToggleButton.Size = UDim2.new(0, 100, 0, 40)
-    ToggleButton.Position = UDim2.new(0, 10, 0, 10)
-    ToggleButton.BackgroundColor3 = SpeedHub.Colors.Primary
-    ToggleButton.BorderSizePixel = 0
-    ToggleButton.Text = "OPEN GUI"
-    ToggleButton.TextColor3 = SpeedHub.Colors.Text
-    ToggleButton.TextSize = 14
-    ToggleButton.Font = Enum.Font.GothamBold
-    
-    local ToggleCorner = Instance.new("UICorner")
-    ToggleCorner.CornerRadius = UDim.new(0, 8)
-    ToggleCorner.Parent = ToggleButton
-    
-    ToggleButton.Parent = ToggleGUI
-    ToggleGUI.Parent = playerGui
-    
-    return ToggleButton
-end
-
+-- เพื่อให้สามารถเรียกใช้ไลบรารีได้
 return SpeedHub
