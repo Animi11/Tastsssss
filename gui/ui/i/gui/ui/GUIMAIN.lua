@@ -81,38 +81,34 @@ function SpeedHub:MakeWindow(config)
     TitleBarCorner.Parent = TitleBar
 
     -- โค้ดสำหรับลากหน้าต่าง (Drag Functionality)
-    local dragging = false
+    local dragConnection
     local dragStart = Vector2.new(0, 0)
     local frameStartPos = UDim2.new(0, 0, 0, 0)
 
     TitleBar.MouseButton1Down:Connect(function()
-        dragging = true
         dragStart = UserInputService:GetMouseLocation()
         frameStartPos = Window.MainFrame.Position
         UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter -- ล็อคเมาส์ขณะลาก
-    end)
-
-    UserInputService.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            local delta = input.Position - dragStart
+        
+        dragConnection = RunService.Heartbeat:Connect(function()
+            local mousePos = UserInputService:GetMouseLocation()
+            local delta = mousePos - dragStart
             
             -- คำนวณตำแหน่งใหม่ โดยใช้ scale ของ ScreenGui
             local newXScale = frameStartPos.X.Scale + (delta.X / Window.Gui.AbsoluteSize.X)
             local newYScale = frameStartPos.Y.Scale + (delta.Y / Window.Gui.AbsoluteSize.Y)
 
             Window.MainFrame.Position = UDim2.new(newXScale, 0, newYScale, 0)
+        end)
+    end)
+
+    TitleBar.MouseButton1Up:Connect(function()
+        if dragConnection then
+            dragConnection:Disconnect()
+            dragConnection = nil
+            UserInputService.MouseBehavior = Enum.MouseBehavior.Default
         end
     end)
-    
-    UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            if dragging then
-                dragging = false
-                UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-            end
-        end
-    end)
-    -- สิ้นสุดโค้ดลากหน้าต่าง
     
     -- Logo (Ama Hub Icon)
     local Logo = Instance.new("TextLabel")
@@ -610,7 +606,7 @@ function SpeedHub:MakeWindow(config)
             
             function slider:SetValue(value)
                 -- ปรับค่าให้เป็นไปตาม Increase และ Min/Max
-                value = math.floor(value / self.Increase + 0.5) * self.Increase -- ปัดเศษทศนิยม
+                value = math.floor(value / self.Increase + 0.5) * self.Increase
                 value = math.clamp(value, self.Min, self.Max)
                 self.Value = value
                 
@@ -625,7 +621,9 @@ function SpeedHub:MakeWindow(config)
             
             -- Slider dragging logic
             local dragging = false
-            local updateSlider = function(input)
+            local dragConnection = nil
+            
+            local function updateSlider(input)
                 local relativeX = (input.Position.X - SliderTrack.AbsolutePosition.X) / SliderTrack.AbsoluteSize.X
                 
                 local rawValue = slider.Min + relativeX * (slider.Max - slider.Min)
@@ -642,13 +640,29 @@ function SpeedHub:MakeWindow(config)
             SliderButton.MouseButton1Down:Connect(function()
                 dragging = true
                 UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+                
+                -- ใช้ InputChanged ของ UserInputService สำหรับการอัพเดทต่อเนื่อง
+                dragConnection = UserInputService.InputChanged:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseMovement then
+                        updateSlider(input)
+                    end
+                end)
             end)
             
             SliderTrack.MouseButton1Down:Connect(function(input)
                 if input.UserInputType == Enum.UserInputType.MouseButton1 then
                     updateSlider(input)
-                    dragging = true -- เริ่มลากทันทีเมื่อคลิกที่ Track
+                    
+                    -- เริ่มต้นลากเมื่อคลิกที่ Track
+                    dragging = true
                     UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+                    
+                    if dragConnection then dragConnection:Disconnect() end -- ป้องกันการซ้ำซ้อน
+                    dragConnection = UserInputService.InputChanged:Connect(function(input)
+                        if input.UserInputType == Enum.UserInputType.MouseMovement then
+                            updateSlider(input)
+                        end
+                    end)
                 end
             end)
             
@@ -657,13 +671,11 @@ function SpeedHub:MakeWindow(config)
                     if dragging then
                         dragging = false
                         UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+                        if dragConnection then 
+                            dragConnection:Disconnect()
+                            dragConnection = nil
+                        end
                     end
-                end
-            end)
-            
-            RunService.InputChanged:Connect(function(input)
-                if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-                    updateSlider(input)
                 end
             end)
             
@@ -858,7 +870,7 @@ function SpeedHub:MakeWindow(config)
                 -- อัพเดทขนาดของ DropdownFrame ให้พอดีกับรายการ
                 if self.Open then
                     -- Trigger AutomaticSize
-                    DropdownFrame.Size = UDim2.new(1, 0, 0, 60)
+                    DropdownFrame.Size = UDim2.new(1, 0, 0, DropdownList.AbsoluteSize.Y + 60)
                 else
                     DropdownFrame.Size = UDim2.new(1, 0, 0, 60)
                 end
@@ -996,7 +1008,7 @@ function SpeedHub:MakeWindow(config)
         button.MouseButton1Click:Connect(function()
             local isVisible = Window.MainFrame.Visible
             Window.MainFrame.Visible = not isVisible
-            button.Text = isVisible and "OPEN GUI" or "CLOSE GUI"
+            button.Text = isVisible and "OPEN GUI" or "HIDE GUI"
         end)
         
         -- ซ่อนปุ่ม Toggle ถ้า MainFrame ถูกสร้างให้มองเห็นตอนเริ่มต้น
